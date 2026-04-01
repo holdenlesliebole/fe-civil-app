@@ -1,0 +1,19 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+client/build/
+
+# Local study data (history + usage)
+data/
+
+# Reference handbook PDF (copyrighted, add your own)
+*.pdf
+
+# OS
+.DS_Store
