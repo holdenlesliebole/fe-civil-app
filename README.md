@@ -4,6 +4,30 @@ An AI-powered practice exam for the **NCEES Fundamentals of Engineering (FE) Civ
 
 ---
 
+## Screenshots
+
+Pick a topic area, difficulty, and session length:
+
+![Session setup screen](docs/screenshots/01-setup.png)
+
+Each question arrives with a pointer into the FE Reference Handbook, so you practice
+the lookup alongside the physics:
+
+![A hard structural engineering question](docs/screenshots/04-question-structural.png)
+
+Answer it and you get the full worked solution, plus why each distractor is wrong:
+
+![Worked solution for the structural question](docs/screenshots/05-solution-structural.png)
+
+Questions are generated per topic and difficulty — a medium fluid mechanics problem
+and an easy geotechnical one:
+
+![A fluid mechanics question](docs/screenshots/02-question-fluid-mechanics.png)
+
+![A geotechnical question](docs/screenshots/06-question-geotechnical.png)
+
+---
+
 ## What You Need Before Starting
 
 1. **Node.js v18 or newer** -- this is the runtime that powers the app.
@@ -224,3 +248,24 @@ rm -rf client/build
 ```
 
 The app will detect the missing build and recompile automatically.
+
+---
+
+## A Note on Question Accuracy
+
+Questions are generated on demand by a language model, and **their accuracy has not been
+measured.** The model is instructed to solve each problem before writing the answer choices,
+confirm its computed answer appears among them, and check units, trigonometry, and sign
+conventions. Those instructions reduce errors but do not eliminate them, and nothing in the app
+verifies a generated question against an independent solution.
+
+A question with a wrong answer key looks exactly like a correct one. If your worked answer
+disagrees with the app's, treat that as a question about the key before assuming it is your
+arithmetic.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+The NCEES FE Reference Handbook is **not** covered by this license and is not distributed with
+this repository. Supply your own copy, as described in the setup steps above.

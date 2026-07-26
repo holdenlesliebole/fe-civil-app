@@ -47,6 +47,12 @@ if (fs.existsSync(BUILD_DIR)) {
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Single source of truth for the model. Override with MODEL=... in server/.env.
+// Note: on Sonnet 5, omitting `thinking` runs adaptive thinking, and max_tokens
+// caps thinking + response text together — hence the explicit disable at each
+// call site, so a thinking burst can't truncate the JSON the client parses.
+const MODEL = process.env.MODEL || "claude-sonnet-5";
+
 const SYSTEM_PROMPT = `You are an expert civil engineering exam tutor specializing in the NCEES FE Civil CBT exam. You generate realistic, high-quality multiple choice practice questions exactly matching the format and difficulty of the actual FE Civil exam.
 
 CRITICAL RULES:
@@ -81,6 +87,35 @@ JSON format:
   "topic": "Specific subtopic within the area"
 }`;
 
+// Structured-output schema for /api/question. Asking for JSON in the prompt is
+// not a guarantee: the model sometimes prefixed a reasoning preamble or wrapped
+// the object in a ```json fence, which made the client's JSON.parse fail and
+// left the UI stuck on "generating" forever. Constraining the response format
+// makes that class of failure impossible.
+const QUESTION_SCHEMA = {
+  type: "object",
+  properties: {
+    question: { type: "string" },
+    choices: {
+      type: "object",
+      properties: {
+        A: { type: "string" },
+        B: { type: "string" },
+        C: { type: "string" },
+        D: { type: "string" },
+      },
+      required: ["A", "B", "C", "D"],
+      additionalProperties: false,
+    },
+    correct: { type: "string", enum: ["A", "B", "C", "D"] },
+    explanation: { type: "string" },
+    handbook_hint: { type: "string" },
+    topic: { type: "string" },
+  },
+  required: ["question", "choices", "correct", "explanation", "handbook_hint", "topic"],
+  additionalProperties: false,
+};
+
 // ── Generate question (streaming JSON) ──────────────────────────
 app.post("/api/question", async (req, res) => {
   const { topic, difficulty } = req.body;
@@ -100,8 +135,12 @@ Return only the JSON object described in your instructions.`;
 
   try {
     const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1200,
+      model: MODEL,
+      // Hard questions produce long worked solutions; too low a cap truncates the
+      // JSON mid-explanation and the client hangs waiting to parse it.
+      max_tokens: 4000,
+      thinking: { type: "disabled" },
+      output_config: { format: { type: "json_schema", schema: QUESTION_SCHEMA } },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],
     });
@@ -156,8 +195,9 @@ Help the student understand this problem. Be precise, use step-by-step reasoning
 
   try {
     const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 800,
+      model: MODEL,
+      max_tokens: 1200,
+      thinking: { type: "disabled" },
       messages: apiMessages,
     });
 
@@ -214,8 +254,9 @@ app.post("/api/formula-lookup", async (req, res) => {
 
   try {
     const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 600,
+      model: MODEL,
+      max_tokens: 900,
+      thinking: { type: "disabled" },
       messages: [{
         role: "user",
         content: `You are an FE Civil exam reference assistant. The student is looking up: "${query}"
