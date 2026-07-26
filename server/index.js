@@ -48,10 +48,18 @@ if (fs.existsSync(BUILD_DIR)) {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Single source of truth for the model. Override with MODEL=... in server/.env.
-// Note: on Sonnet 5, omitting `thinking` runs adaptive thinking, and max_tokens
-// caps thinking + response text together — hence the explicit disable at each
-// call site, so a thinking burst can't truncate the JSON the client parses.
 const MODEL = process.env.MODEL || "claude-sonnet-5";
+
+// Question generation and tutoring both hinge on getting the engineering right,
+// so they run with adaptive thinking: the model reasons before answering rather
+// than composing an answer as it writes. The system prompt already asks it to
+// solve the problem and verify its answer appears among the choices — thinking
+// is where that work actually happens.
+//
+// max_tokens caps thinking AND response text together, so any endpoint using
+// this needs a budget well above the size of its visible output; too tight a cap
+// spends the budget on reasoning and truncates the answer.
+const THINKING = { type: "adaptive" };
 
 const SYSTEM_PROMPT = `You are an expert civil engineering exam tutor specializing in the NCEES FE Civil CBT exam. You generate realistic, high-quality multiple choice practice questions exactly matching the format and difficulty of the actual FE Civil exam.
 
@@ -136,10 +144,10 @@ Return only the JSON object described in your instructions.`;
   try {
     const stream = client.messages.stream({
       model: MODEL,
-      // Hard questions produce long worked solutions; too low a cap truncates the
-      // JSON mid-explanation and the client hangs waiting to parse it.
-      max_tokens: 4000,
-      thinking: { type: "disabled" },
+      // Covers thinking plus the JSON. A hard question's JSON alone runs ~1k
+      // tokens; the rest is headroom for reasoning on the hardest problems.
+      max_tokens: 12000,
+      thinking: THINKING,
       output_config: { format: { type: "json_schema", schema: QUESTION_SCHEMA } },
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],
@@ -196,8 +204,8 @@ Help the student understand this problem. Be precise, use step-by-step reasoning
   try {
     const stream = client.messages.stream({
       model: MODEL,
-      max_tokens: 1200,
-      thinking: { type: "disabled" },
+      max_tokens: 5000,
+      thinking: THINKING,
       messages: apiMessages,
     });
 
@@ -256,6 +264,9 @@ app.post("/api/formula-lookup", async (req, res) => {
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 900,
+      // Deliberately no thinking here, unlike the question and tutor endpoints.
+      // This is the mid-problem "where is that table" lookup, where latency is
+      // the whole point and the task is recall rather than derivation.
       thinking: { type: "disabled" },
       messages: [{
         role: "user",
